@@ -40,7 +40,7 @@ function replaceV4Utilities(processor: SafeClassProcessor, classes: ClassInfo[])
     }
 
     modified =
-      processor.markForReplacement(classInfo.original, `${classInfo.variants}${replacement}`) ||
+      processor.markIndexForReplacement(classInfo.index, `${classInfo.variants}${replacement}`) ||
       modified;
   }
 

@@ -31,6 +31,15 @@ describe('v4UtilityConversion', () => {
     expect(newContent).toBe('<div class="shrink-0 grow text-ellipsis box-decoration-clone"></div>');
   });
 
+  it('should rename duplicate deprecated utilities', () => {
+    const content = '<div class="shadow shadow flex-shrink-0 flex-shrink-0"></div>';
+
+    const { newContent, changed } = v4UtilityConversion(content, 'test.html');
+
+    expect(changed).toBe(true);
+    expect(newContent).toBe('<div class="shadow-sm shadow-sm shrink-0 shrink-0"></div>');
+  });
+
   it('should not alter unrelated utilities or already modern utilities', () => {
     const content = '<div class="shadow-xs rounded-md ring-2 shrink-0 grow text-red-500"></div>';
 

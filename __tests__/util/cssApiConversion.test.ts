@@ -20,6 +20,15 @@ describe('cssApiConversion', () => {
     expect(newContent).toBe('@import "tailwindcss";\n.foo { color: blue; }');
   });
 
+  it('should insert a real import when import text only appears in a comment', () => {
+    const content = '/* @import "tailwindcss"; */\n@tailwind utilities;\n.foo { color: blue; }';
+
+    const { newContent, changed } = cssApiConversion(content);
+
+    expect(changed).toBe(true);
+    expect(newContent).toBe('/* @import "tailwindcss"; */\n@import "tailwindcss";\n.foo { color: blue; }');
+  });
+
   it('should not change CSS without Tailwind directives', () => {
     const content = '@import "tailwindcss";\n.foo { color: blue; }';
 

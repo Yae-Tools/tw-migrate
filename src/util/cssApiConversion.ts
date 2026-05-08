@@ -1,6 +1,7 @@
 import { ConversionResult } from '../types/conversionTypes.js';
 
 const TAILWIND_DIRECTIVE_PATTERN = /^\s*@tailwind\s+(base|components|utilities)\s*;\s*$/;
+const TAILWIND_IMPORT_PATTERN = /^\s*@import\s+["']tailwindcss["']\s*;\s*$/;
 const TAILWIND_IMPORT = '@import "tailwindcss";';
 
 const cssApiConversion = (content: string): ConversionResult => {
@@ -11,7 +12,7 @@ const cssApiConversion = (content: string): ConversionResult => {
     return { newContent: content, changed: false };
   }
 
-  let insertedImport = content.includes(TAILWIND_IMPORT);
+  let insertedImport = lines.some((line) => TAILWIND_IMPORT_PATTERN.test(line));
   const newContent = lines
     .flatMap((line) => {
       if (!TAILWIND_DIRECTIVE_PATTERN.test(line)) {

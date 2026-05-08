@@ -58,6 +58,16 @@ export class SafeClassProcessor {
     const index = this.originalClasses.indexOf(original);
     if (index === -1) return false;
 
+    return this.markIndexForReplacement(index, replacement);
+  }
+
+  /**
+   * Mark a specific class occurrence for replacement
+   */
+  markIndexForReplacement(index: number, replacement: string): boolean {
+    const original = this.originalClasses[index];
+    if (!original) return false;
+
     this.marks.push({
       index,
       operation: 'replace',
