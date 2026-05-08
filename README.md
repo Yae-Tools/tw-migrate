@@ -120,8 +120,11 @@ npx tw-migrate -c "size,gap" -p "apps/web/src/**/*.tsx"
 # Skip Git checks in CI environment
 npx tw-migrate -c size --ignore-git -p "src/**/*.tsx"
 
-# Non-interactive with all conversions
-npx tw-migrate -c "size,margin,padding,color-opacity,gap" --ignore-git
+# Preview changes without writing files
+npx tw-migrate -c size --dry-run --diff
+
+# CI check: fail if files would change
+npx tw-migrate -c "size,margin,padding,color-opacity,gap" --check --json --ignore-git
 ```
 
 ## 🔄 Conversion Types
@@ -193,6 +196,12 @@ Converts `space-x` and `space-y` to `gap` when used together on flex or grid con
 | `--conversions` | `-c` | `string[]` | Conversion types to apply | Interactive prompt |
 | `--path` | `-p` | `string` | Glob pattern for file targeting | `./**/*.{js,jsx,ts,tsx,html,css,svelte}` |
 | `--ignore-git` | | `boolean` | Skip Git repository checks | `false` |
+| `--exclude` | `-e` | `string[]` | Glob patterns to exclude | `[]` |
+| `--config` | | `string` | Path to config JSON file | auto-detect |
+| `--dry-run` | | `boolean` | Preview changes without writing files | `false` |
+| `--diff` | | `boolean` | Print a diff for changed files | `false` |
+| `--check` | | `boolean` | Exit with code 1 if files would change | `false` |
+| `--json` | | `boolean` | Print machine-readable summary | `false` |
 | `--version` | | | Display version information | |
 | `--help` | | | Show help information | |
 
@@ -227,6 +236,28 @@ The tool automatically detects your project environment:
 - **Tailwind Version**: Validates compatibility requirements
 - **Git Status**: Checks for uncommitted changes
 - **File Types**: Adjusts processing based on detected framework
+
+### Config File
+
+You can store repeatable options in `tw-migrate.config.json` or `.tw-migraterc.json`:
+
+```json
+{
+  "path": "src/**/*.{js,jsx,ts,tsx,html,svelte}",
+  "exclude": ["**/*.test.tsx", "**/dist/**"],
+  "conversions": ["size", "margin", "padding", "color-opacity", "gap"],
+  "dryRun": false,
+  "diff": false,
+  "check": false,
+  "ignoreGit": false
+}
+```
+
+Use a custom location with:
+
+```bash
+npx tw-migrate --config ./config/tw-migrate.json
+```
 
 ### Git Integration
 
@@ -266,8 +297,7 @@ npx tw-migrate --ignore-git
 
 ### Node.js Compatibility
 
-- **Minimum**: Node.js v16
-- **Recommended**: Node.js v18+
+- **Minimum**: Node.js v20.19+, v22.13+, or v23.5+
 - **Dependencies**: All dependencies are bundled for minimal installation overhead
 
 ## 🚨 Troubleshooting
@@ -315,8 +345,11 @@ chmod 644 src/components/*.tsx
 For detailed output, run with verbose logging:
 
 ```bash
-# Enable debug output (if implemented)
-DEBUG=tw-migrate npx tw-migrate
+# Preview the exact changes
+npx tw-migrate -c size --dry-run --diff
+
+# Machine-readable output for automation
+npx tw-migrate -c size --check --json --ignore-git
 ```
 
 ## 🏗️ Advanced Usage

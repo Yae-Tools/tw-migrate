@@ -287,7 +287,7 @@ describe('CLI Tool', () => {
       const run = await importRun();
       await run();
       
-      expect(mockExitMessage).toHaveBeenCalledTimes(2);
+      expect(mockExitMessage).toHaveBeenCalledTimes(1);
     });
 
     it('should exit when git repository is not clean and ignore-git is false', async () => {
@@ -330,7 +330,7 @@ describe('CLI Tool', () => {
       const run = await importRun();
       await run();
       
-      expect(mockExitMessage).toHaveBeenCalledTimes(2);
+      expect(mockExitMessage).toHaveBeenCalledTimes(1);
     });
 
     it('should continue when git repository is not clean but ignore-git is true (kebab-case)', async () => {
@@ -350,7 +350,7 @@ describe('CLI Tool', () => {
       const run = await importRun();
       await run();
       
-      expect(mockExitMessage).toHaveBeenCalledTimes(2);
+      expect(mockExitMessage).toHaveBeenCalledTimes(1);
     });
 
     it('should warn when not a git repository', async () => {
@@ -364,7 +364,7 @@ describe('CLI Tool', () => {
       expect(mockConsoleWarn).toHaveBeenCalledWith(
         'Warning: Not a Git repository or Git not installed. Skipping Git clean check.'
       );
-      expect(mockExitMessage).toHaveBeenCalledTimes(2);
+      expect(mockExitMessage).toHaveBeenCalledTimes(1);
     });
   });
 

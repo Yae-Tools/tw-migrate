@@ -17,8 +17,12 @@ export interface ClassOperation {
 
 export interface ProcessingResult {
   success: boolean;
+  filePath?: string;
   error?: Error;
   changes?: number;
+  changed?: boolean;
+  oldContent?: string;
+  newContent?: string;
   operations?: ClassOperation[];
 }
 
