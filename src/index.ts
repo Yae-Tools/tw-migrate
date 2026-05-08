@@ -8,8 +8,18 @@ import { detectEnvironment, getTailwindVersion, shouldShowTailwindWarning } from
 import { exitMessage } from './util/exitMessage.js';
 import { ParallelProcessor } from './util/parallelProcessor.js';
 import { ErrorHandler } from './util/errorHandler.js';
+import { GitStatus, ProcessingResult } from './types/conversionTypes.js';
 import chalk from 'chalk';
 import ora from 'ora';
+
+type CliArgs = {
+  conversions?: string[];
+  path: string;
+  ignoreGit?: boolean;
+  'ignore-git'?: boolean;
+  maxMemory?: number;
+  'max-memory'?: number;
+};
 
 const argv = yargs(hideBin(process.argv))
   .option('conversions', {
@@ -22,7 +32,7 @@ const argv = yargs(hideBin(process.argv))
     alias: 'p',
     type: 'string',
     description: 'The path to the files to convert',
-    default: './**/*.{js,jsx,ts,tsx,html,css,svelte}', // Default to common file types in current directory
+    default: './**/*.{js,jsx,ts,tsx,html,css,svelte}',
   })
   .option('ignore-git', {
     type: 'boolean',
@@ -36,8 +46,7 @@ const argv = yargs(hideBin(process.argv))
   })
   .help().argv;
 
-async function run() {
-  const logo = `
+const logo = `
  ██╗   ██╗ █████╗ ███████╗      ███╗   ███╗ ██████╗ ██████╗ ███████╗██████╗ ███╗   ██╗██╗███████╗███████╗
  ╚██╗ ██╔╝██╔══██╗██╔════╝      ████╗ ████║██╔═══██╗██╔══██╗██╔════╝██╔══██╗████╗  ██║██║╚══███╔╝██╔════╝
   ╚████╔╝ ███████║█████╗  █████╗██╔████╔██║██║   ██║██║  ██║█████╗  ██████╔╝██╔██╗ ██║██║  ███╔╝ █████╗  
@@ -56,60 +65,83 @@ async function run() {
                                       Tailwind CSS Class Converter
 `;
 
+async function run() {
   console.log(chalk.cyan(logo));
 
-  let {
-    conversions,
-    path,
-    ignoreGit,
-    'ignore-git': ignoreGitKebab,
-    maxMemory,
-    'max-memory': maxMemoryKebab,
-  } = await argv;
-  ignoreGit = typeof ignoreGit !== 'undefined' ? ignoreGit : ignoreGitKebab;
-  maxMemory = typeof maxMemory !== 'undefined' ? maxMemory : maxMemoryKebab;
+  const args = normalizeArgs((await argv) as CliArgs);
+  await showEnvironmentWarnings(process.cwd());
+  const gitStatus = await checkGitStatus(args.ignoreGit);
+  const selectedConversions = await resolveConversions(args.conversions);
 
-  const currentDir = process.cwd();
+  if (!selectedConversions) {
+    return;
+  }
+
+  const files = await findFiles(args.path);
+  if (files.length === 0) {
+    return;
+  }
+
+  await processFiles(files, selectedConversions, gitStatus, args.maxMemory);
+  exitMessage();
+}
+
+function normalizeArgs(args: CliArgs): Required<Pick<CliArgs, 'path'>> & {
+  conversions?: string[];
+  ignoreGit: boolean;
+  maxMemory?: number;
+} {
+  return {
+    conversions: args.conversions,
+    path: args.path,
+    ignoreGit: args.ignoreGit ?? args['ignore-git'] ?? false,
+    maxMemory: args.maxMemory ?? args['max-memory'],
+  };
+}
+
+async function showEnvironmentWarnings(currentDir: string): Promise<void> {
   const detectedEnv = await detectEnvironment(currentDir);
-
-  // Check Tailwind CSS version and show warning if needed
   const tailwindVersion = await getTailwindVersion(currentDir);
+
   if (shouldShowTailwindWarning(tailwindVersion)) {
     console.log(
       "\x1b[31m⚠️  Warning: For full compatibility, especially with 'size' conversions, ensure your project uses Tailwind CSS v3.4 or later.\x1b[0m",
     );
-    console.log(''); // Add an empty line for spacing
+    console.log('');
   }
 
-  if (detectedEnv !== 'Unknown' && process.stdout.isTTY) {
-    const confirmEnv = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'continue',
-        message: chalk.blue(`${detectedEnv} environment detected. Press Y to continue...`),
-        default: true,
-      },
-    ]);
-    if (!confirmEnv.continue) {
-      console.log(chalk.red('Operation cancelled by user.'));
-      exitMessage();
-    }
+  if (detectedEnv === 'Unknown' || !process.stdout.isTTY) {
+    return;
   }
 
+  const confirmEnv = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'continue',
+      message: chalk.blue(`${detectedEnv} environment detected. Press Y to continue...`),
+      default: true,
+    },
+  ]);
+
+  if (!confirmEnv.continue) {
+    console.log(chalk.red('Operation cancelled by user.'));
+    exitMessage();
+  }
+}
+
+async function checkGitStatus(ignoreGit: boolean): Promise<GitStatus> {
   const git = simpleGit();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let gitStatus: any = undefined;
 
   try {
     const status = await git.status();
-    gitStatus = {
+    const gitStatus: GitStatus = {
       isRepo: true,
       hasChanges: !status.isClean(),
-      currentBranch: status.current,
-      lastCommit: undefined, // Could be enhanced to get last commit
+      currentBranch: status.current ?? undefined,
+      lastCommit: undefined,
     };
 
-    if (!status.isClean() && !ignoreGit) {
+    if (gitStatus.hasChanges && !ignoreGit) {
       console.error(
         chalk.red(
           'Error: Git repository is not clean. Please commit or stash your changes before running the converter, or use --ignore-git to override.',
@@ -117,130 +149,144 @@ async function run() {
       );
       exitMessage();
     }
+
+    return gitStatus;
   } catch {
-    gitStatus = {
-      isRepo: false,
-      hasChanges: false,
-    };
     console.warn(
       chalk.yellow('Warning: Not a Git repository or Git not installed. Skipping Git clean check.'),
     );
+    return { isRepo: false, hasChanges: false };
+  }
+}
+
+async function resolveConversions(conversions?: string[]): Promise<string[] | null> {
+  if (conversions && conversions.length > 0) {
+    return conversions;
   }
 
-  if (!conversions || conversions.length === 0) {
-    if (process.stdout.isTTY) {
-      const answers = await inquirer.prompt([
-        {
-          type: 'checkbox',
-          name: 'selectedConversions',
-          message: chalk.blue('Select the conversions to apply:'),
-          choices: Object.keys(CONVERSIONS),
-        },
-      ]);
-      conversions = answers.selectedConversions;
-    } else {
-      console.log(
-        chalk.yellow(
-          'No conversions selected. Please specify conversions with the -c flag or run in an interactive terminal.',
-        ),
-      );
-      console.log(
-        chalk.yellow(
-          'Example: `npx yae-modernize-tailwind -c size,spacing,typography -p "./src/**/*.{js,jsx,ts,tsx,html,css,svelte}"`',
-        ),
-      );
-      exitMessage();
-      return;
-    }
+  if (!process.stdout.isTTY) {
+    console.log(
+      chalk.yellow(
+        'No conversions selected. Please specify conversions with the -c flag or run in an interactive terminal.',
+      ),
+    );
+    console.log(
+      chalk.yellow(
+        'Example: `npx tw-migrate -c size,spacing,typography -p "./src/**/*.{js,jsx,ts,tsx,html,css,svelte}"`',
+      ),
+    );
+    exitMessage();
+    return null;
   }
 
-  if (!conversions || conversions.length === 0) {
+  const answers = await inquirer.prompt([
+    {
+      type: 'checkbox',
+      name: 'selectedConversions',
+      message: chalk.blue('Select the conversions to apply:'),
+      choices: Object.keys(CONVERSIONS),
+    },
+  ]);
+
+  const selectedConversions = answers.selectedConversions as string[] | undefined;
+  if (!selectedConversions || selectedConversions.length === 0) {
     console.log(chalk.red('No conversions selected. Exiting.'));
     exitMessage();
-    return;
+    return null;
   }
 
-  const files = await glob(path, { nodir: true, ignore: ['node_modules/**'] });
+  return selectedConversions;
+}
+
+async function findFiles(pathPattern: string): Promise<string[]> {
+  const files = await glob(pathPattern, { nodir: true, ignore: ['node_modules/**'] });
 
   if (files.length === 0) {
     console.log(chalk.yellow('No files found matching the specified pattern.'));
     exitMessage();
-    return;
+    return [];
   }
 
   console.log(chalk.blue(`Found ${files.length} files to process...`));
+  return files;
+}
 
+async function processFiles(
+  files: string[],
+  conversions: string[],
+  gitStatus: GitStatus,
+  maxMemory?: number,
+): Promise<void> {
   const spinner = ora(chalk.cyan('Initializing processing...')).start();
 
   try {
-    // Initialize error handler with git status
     await ErrorHandler.initSession(files.length, gitStatus);
-    // Set up progress callback
-    const progressCallback = (processed: number, total: number, currentFile: string) => {
-      const percentage = ((processed / total) * 100).toFixed(1);
-      spinner.text = chalk.cyan(`Processing [${percentage}%]: ${currentFile}`);
-    };
-
-    // Update conversion functions to accept filePath parameter
-    const enhancedConversions = Object.fromEntries(
-      Object.entries(CONVERSIONS).map(([key, fn]) => [
-        key,
-        (content: string, filePath?: string) => fn(content, filePath),
-      ]),
-    );
-
-    // Use auto-processing mode for optimal performance
     const results = await ParallelProcessor.autoProcessFiles(
       files,
       conversions,
-      enhancedConversions,
-      progressCallback,
+      createEnhancedConversions(),
+      (processed, total, currentFile) => {
+        const percentage = ((processed / total) * 100).toFixed(1);
+        spinner.text = chalk.cyan(`Processing [${percentage}%]: ${currentFile}`);
+      },
       maxMemory,
     );
 
     spinner.stop();
-
-    // Process results
-    const successCount = results.filter((r) => r.success).length;
-    const changeCount = results.reduce((sum, r) => sum + (r.changes || 0), 0);
-    const errorCount = results.filter((r) => !r.success).length;
-
-    console.log('');
-    if (errorCount === 0) {
-      console.log(chalk.green(`✅ Successfully processed ${successCount} files`));
-      if (changeCount > 0) {
-        console.log(chalk.blue(`🔧 Applied changes to ${changeCount} files`));
-      } else {
-        console.log(chalk.blue('📝 No changes were needed'));
-      }
-    } else {
-      console.log(
-        chalk.yellow(`⚠️  Processed ${successCount} files successfully, ${errorCount} failed`),
-      );
-      if (changeCount > 0) {
-        console.log(chalk.blue(`🔧 Applied changes to ${changeCount} files`));
-      }
-    }
-
-    // Display detailed error report
-    const errorReport = await ErrorHandler.generateReport();
-    console.log(errorReport);
+    printProcessingSummary(results);
+    console.log(await ErrorHandler.generateReport());
   } catch (error) {
     spinner.fail(chalk.red('Processing failed with fatal error'));
-
-    if (error instanceof Error) {
-      console.error(chalk.red(`Error: ${error.message}`));
-    } else {
-      console.error(chalk.red('An unknown error occurred'));
-    }
-
+    printFatalError(error);
     process.exit(1);
   }
-  exitMessage();
-  return;
+}
+
+function createEnhancedConversions(): Record<
+  string,
+  (content: string, filePath?: string) => ReturnType<(typeof CONVERSIONS)[keyof typeof CONVERSIONS]>
+> {
+  return Object.fromEntries(
+    Object.entries(CONVERSIONS).map(([key, fn]) => [
+      key,
+      (content: string, filePath?: string) => fn(content, filePath),
+    ]),
+  );
+}
+
+function printProcessingSummary(results: ProcessingResult[]): void {
+  const successCount = results.filter((result) => result.success).length;
+  const changeCount = results.reduce((sum, result) => sum + (result.changes || 0), 0);
+  const errorCount = results.filter((result) => !result.success).length;
+
+  console.log('');
+  if (errorCount === 0) {
+    console.log(chalk.green(`✅ Successfully processed ${successCount} files`));
+    console.log(
+      changeCount > 0
+        ? chalk.blue(`🔧 Applied changes to ${changeCount} files`)
+        : chalk.blue('📝 No changes were needed'),
+    );
+    return;
+  }
+
+  console.log(
+    chalk.yellow(`⚠️  Processed ${successCount} files successfully, ${errorCount} failed`),
+  );
+  if (changeCount > 0) {
+    console.log(chalk.blue(`🔧 Applied changes to ${changeCount} files`));
+  }
+}
+
+function printFatalError(error: unknown): void {
+  if (error instanceof Error) {
+    console.error(chalk.red(`Error: ${error.message}`));
+    return;
+  }
+
+  console.error(chalk.red('An unknown error occurred'));
 }
 
 export { run };
 
-// Always run the CLI when this file is executed
 run().catch(console.error);

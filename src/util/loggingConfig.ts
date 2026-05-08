@@ -10,19 +10,19 @@ import os from 'os';
  * from multiple sources with proper priority handling.
  */
 export class LoggingConfigManager {
-  private static defaultConfig: LoggingConfig = {
+  private static readonly defaultConfig: LoggingConfig = {
     enabled: true,
     logLevel: 'error',
     maxLogFiles: 30,
     maxLogSizeBytes: 10 * 1024 * 1024, // 10MB
-    logDirectory: path.join(os.homedir(), '.yae-modernize-tailwind', 'logs'),
+    logDirectory: path.join(os.homedir(), '.tw-migrate', 'logs'),
     enableMemoryBuffer: true,
     bufferSize: 100,
   };
 
-  private static configFilePath = path.join(
+  private static readonly configFilePath = path.join(
     os.homedir(),
-    '.yae-modernize-tailwind',
+    '.tw-migrate',
     'config',
     'logging.json',
   );
@@ -79,49 +79,42 @@ export class LoggingConfigManager {
    * Load configuration from environment variables
    */
   private static loadEnvironmentConfig(): Partial<LoggingConfig> {
-    const envConfig: Partial<LoggingConfig> = {};
+    return this.removeUndefinedValues({
+      enabled: this.parseBoolean(process.env.YAE_LOG_ENABLED),
+      logLevel: this.parseLogLevel(process.env.YAE_LOG_LEVEL),
+      logDirectory: process.env.YAE_LOG_DIRECTORY,
+      maxLogFiles: this.parsePositiveInteger(process.env.YAE_LOG_MAX_FILES),
+      maxLogSizeBytes: this.parseMegabytes(process.env.YAE_LOG_MAX_SIZE_MB),
+      enableMemoryBuffer: this.parseBoolean(process.env.YAE_LOG_MEMORY_BUFFER),
+      bufferSize: this.parsePositiveInteger(process.env.YAE_LOG_BUFFER_SIZE),
+    });
+  }
 
-    if (process.env.YAE_LOG_ENABLED !== undefined) {
-      envConfig.enabled = process.env.YAE_LOG_ENABLED === 'true';
-    }
+  private static parseBoolean(value: string | undefined): boolean | undefined {
+    return value === undefined ? undefined : value === 'true';
+  }
 
-    if (process.env.YAE_LOG_LEVEL) {
-      const level = process.env.YAE_LOG_LEVEL.toLowerCase();
-      if (['error', 'warn', 'info', 'debug'].includes(level)) {
-        envConfig.logLevel = level as LoggingConfig['logLevel'];
-      }
-    }
+  private static parseLogLevel(value: string | undefined): LoggingConfig['logLevel'] | undefined {
+    const level = value?.toLowerCase();
+    return level && ['error', 'warn', 'info', 'debug'].includes(level)
+      ? (level as LoggingConfig['logLevel'])
+      : undefined;
+  }
 
-    if (process.env.YAE_LOG_DIRECTORY) {
-      envConfig.logDirectory = process.env.YAE_LOG_DIRECTORY;
-    }
+  private static parsePositiveInteger(value: string | undefined): number | undefined {
+    const parsedValue = value ? Number.parseInt(value, 10) : Number.NaN;
+    return Number.isNaN(parsedValue) || parsedValue <= 0 ? undefined : parsedValue;
+  }
 
-    if (process.env.YAE_LOG_MAX_FILES) {
-      const maxFiles = parseInt(process.env.YAE_LOG_MAX_FILES, 10);
-      if (!isNaN(maxFiles) && maxFiles > 0) {
-        envConfig.maxLogFiles = maxFiles;
-      }
-    }
+  private static parseMegabytes(value: string | undefined): number | undefined {
+    const megabytes = this.parsePositiveInteger(value);
+    return megabytes ? megabytes * 1024 * 1024 : undefined;
+  }
 
-    if (process.env.YAE_LOG_MAX_SIZE_MB) {
-      const maxSizeMB = parseInt(process.env.YAE_LOG_MAX_SIZE_MB, 10);
-      if (!isNaN(maxSizeMB) && maxSizeMB > 0) {
-        envConfig.maxLogSizeBytes = maxSizeMB * 1024 * 1024;
-      }
-    }
-
-    if (process.env.YAE_LOG_MEMORY_BUFFER !== undefined) {
-      envConfig.enableMemoryBuffer = process.env.YAE_LOG_MEMORY_BUFFER === 'true';
-    }
-
-    if (process.env.YAE_LOG_BUFFER_SIZE) {
-      const bufferSize = parseInt(process.env.YAE_LOG_BUFFER_SIZE, 10);
-      if (!isNaN(bufferSize) && bufferSize > 0) {
-        envConfig.bufferSize = bufferSize;
-      }
-    }
-
-    return envConfig;
+  private static removeUndefinedValues(config: Partial<LoggingConfig>): Partial<LoggingConfig> {
+    return Object.fromEntries(
+      Object.entries(config).filter(([, value]) => value !== undefined),
+    ) as Partial<LoggingConfig>;
   }
 
   /**

@@ -496,7 +496,7 @@ describe('ErrorHandler', () => {
         
         expect(fs.appendFile).toHaveBeenCalled();
         expect(fs.mkdir).toHaveBeenCalledWith(
-          expect.stringContaining('.yae-modernize-tailwind/logs'),
+          expect.stringContaining('.tw-migrate/logs'),
           { recursive: true }
         );
       });

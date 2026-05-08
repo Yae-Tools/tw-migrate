@@ -260,67 +260,70 @@ export class ParallelProcessor {
     const fileChunks = ChunkDistributor.distributeFiles(files, chunkSize);
 
     const results: ProcessingResult[] = [];
-    const errors: Error[] = [];
 
-    // Process chunks in parallel with worker limit
     for (let i = 0; i < fileChunks.length; i += maxWorkers) {
       const currentBatch = fileChunks.slice(i, i + maxWorkers);
-
-      // Check memory usage before processing batch
-      if (MemoryMonitor.shouldPauseProcessing(memoryThreshold)) {
-        await MemoryMonitor.waitForMemoryRelease(memoryThreshold * 0.8);
-      }
-
-      // Process current batch in parallel
-      const batchPromises = currentBatch.map((chunk) =>
-        FileWorker.processChunk(chunk, conversions, conversionFunctions),
+      await this.waitForAvailableMemory(memoryThreshold);
+      const batchResults = await this.processBatch(
+        currentBatch,
+        conversions,
+        conversionFunctions,
+        progressAggregator,
       );
-
-      try {
-        const batchResults = await Promise.all(batchPromises);
-
-        // Flatten and process results
-        for (const chunkResults of batchResults) {
-          for (const workerResult of chunkResults) {
-            ErrorHandler.incrementProcessedFiles();
-            progressAggregator.updateProgress(workerResult.filePath);
-
-            if (workerResult.success) {
-              results.push({
-                success: true,
-                changes: workerResult.changed ? 1 : 0,
-              });
-            } else {
-              results.push({
-                success: false,
-                error: workerResult.error,
-              });
-
-              if (workerResult.error) {
-                errors.push(workerResult.error);
-              }
-            }
-          }
-        }
-      } catch (error) {
-        // Handle batch-level errors
-        const batchError = error instanceof Error ? error : new Error(String(error));
-        errors.push(batchError);
-
-        // Mark all files in failed batch as failed
-        for (const chunk of currentBatch) {
-          for (const filePath of chunk) {
-            results.push({
-              success: false,
-              error: batchError,
-            });
-            progressAggregator.updateProgress(filePath);
-          }
-        }
-      }
+      results.push(...batchResults);
     }
 
     return results;
+  }
+
+  private static async waitForAvailableMemory(memoryThreshold: number): Promise<void> {
+    if (MemoryMonitor.shouldPauseProcessing(memoryThreshold)) {
+      await MemoryMonitor.waitForMemoryRelease(memoryThreshold * 0.8);
+    }
+  }
+
+  private static async processBatch(
+    currentBatch: string[][],
+    conversions: string[],
+    conversionFunctions: Record<string, (content: string, filePath?: string) => ConversionResult>,
+    progressAggregator: ProgressAggregator,
+  ): Promise<ProcessingResult[]> {
+    try {
+      const batchResults = await Promise.all(
+        currentBatch.map((chunk) =>
+          FileWorker.processChunk(chunk, conversions, conversionFunctions),
+        ),
+      );
+      return this.mapWorkerResults(batchResults.flat(), progressAggregator);
+    } catch (error) {
+      const batchError = error instanceof Error ? error : new Error(String(error));
+      return this.mapFailedBatch(currentBatch, batchError, progressAggregator);
+    }
+  }
+
+  private static mapWorkerResults(
+    workerResults: WorkerResult[],
+    progressAggregator: ProgressAggregator,
+  ): ProcessingResult[] {
+    return workerResults.map((workerResult) => {
+      ErrorHandler.incrementProcessedFiles();
+      progressAggregator.updateProgress(workerResult.filePath);
+
+      return workerResult.success
+        ? { success: true, changes: workerResult.changed ? 1 : 0 }
+        : { success: false, error: workerResult.error };
+    });
+  }
+
+  private static mapFailedBatch(
+    currentBatch: string[][],
+    batchError: Error,
+    progressAggregator: ProgressAggregator,
+  ): ProcessingResult[] {
+    return currentBatch.flat().map((filePath) => {
+      progressAggregator.updateProgress(filePath);
+      return { success: false, error: batchError };
+    });
   }
 
   /**

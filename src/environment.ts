@@ -1,6 +1,11 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
 
+type PackageJson = {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+};
+
 export type Environment =
   | 'Next.js'
   | 'React'
@@ -19,19 +24,23 @@ async function checkFileExists(filePath: string): Promise<boolean> {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function readPackageJson(projectRoot: string): Promise<any | null> {
+function isPackageJson(value: unknown): value is PackageJson {
+  return typeof value === 'object' && value !== null;
+}
+
+async function readPackageJson(projectRoot: string): Promise<PackageJson | null> {
   const packageJsonPath = path.join(projectRoot, 'package.json');
-  if (await checkFileExists(packageJsonPath)) {
-    const content = await fs.readFile(packageJsonPath, 'utf-8');
-    try {
-      return JSON.parse(content);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (error) {
-      return null;
-    }
+  if (!(await checkFileExists(packageJsonPath))) {
+    return null;
   }
-  return null;
+
+  const content = await fs.readFile(packageJsonPath, 'utf-8');
+  try {
+    const parsedContent: unknown = JSON.parse(content);
+    return isPackageJson(parsedContent) ? parsedContent : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function detectEnvironment(projectRoot: string): Promise<Environment> {
@@ -61,12 +70,9 @@ export async function detectEnvironment(projectRoot: string): Promise<Environmen
     }
   }
 
-  // Default to HTML/CSS if no specific framework is detected but there are HTML/CSS files
-  //TODO: This is a very basic check and can be improved.
-  const htmlFiles = await fs
-    .readdir(projectRoot)
-    .then((files) => files.filter((file) => file.endsWith('.html') || file.endsWith('.css')));
-  if (htmlFiles.length > 0) {
+  // Default to HTML/CSS if no specific framework is detected but there are HTML/CSS files.
+  const projectFiles = await fs.readdir(projectRoot);
+  if (projectFiles.some((file) => file.endsWith('.html') || file.endsWith('.css'))) {
     return 'HTML/CSS';
   }
 
@@ -92,14 +98,29 @@ export function shouldShowTailwindWarning(version: string | null): boolean {
     return true; // Show warning if Tailwind CSS is not found
   }
 
-  // Parse version string (e.g., "^3.4.0", "~3.3.0", "3.4.1", ">=3.4.0")
-  const versionMatch = version.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
-  if (!versionMatch) {
+  const versionParts = extractMajorMinor(version);
+  if (!versionParts) {
     return true; // Show warning if version format is unrecognizable
   }
 
-  const [, major, minor] = versionMatch.map(Number);
+  const { major, minor } = versionParts;
 
   // Show warning if version is below 3.4
   return major < 3 || (major === 3 && minor < 4);
+}
+
+function extractMajorMinor(version: string): { major: number; minor: number } | null {
+  const versionStartIndex = [...version].findIndex(
+    (character) => character >= '0' && character <= '9',
+  );
+  if (versionStartIndex === -1) {
+    return null;
+  }
+
+  const [major, minor] = version.slice(versionStartIndex).split('.').map(Number);
+  if (!Number.isInteger(major) || !Number.isInteger(minor)) {
+    return null;
+  }
+
+  return { major, minor };
 }

@@ -182,24 +182,6 @@ export const PATTERN_MATCHERS: PatternMatcher[] = [
     extractor: extractTemplate,
     reconstructor: reconstructTemplate,
   },
-
-  // Multi-line class attributes (HTML)
-  {
-    pattern: /class\s*=\s*["']([^"']*(?:\r?\n[^"']*)*?)["']/gm,
-    framework: ['html', 'php', 'django', 'erb'],
-    syntax: 'multiline',
-    extractor: extractQuoted,
-    reconstructor: reconstructHTML,
-  },
-
-  // Multi-line className attributes (React/JSX)
-  {
-    pattern: /className\s*=\s*["']([^"']*(?:\r?\n[^"']*)*?)["']/gm,
-    framework: ['react', 'jsx', 'tsx'],
-    syntax: 'multiline',
-    extractor: extractQuoted,
-    reconstructor: reconstructJSX,
-  },
 ];
 
 /**
@@ -240,70 +222,83 @@ export interface ClassMatch {
 }
 
 export const extractAllClassMatches = (content: string, filePath: string): ClassMatch[] => {
-  const matchers = getPatternMatchersForFile(filePath);
   const matches: ClassMatch[] = [];
   const seen = new Set<string>();
 
-  for (const matcher of matchers) {
-    let match;
-    // Reset the regex lastIndex to ensure we start from the beginning
-    matcher.pattern.lastIndex = 0;
-
-    while ((match = matcher.pattern.exec(content)) !== null) {
-      const classes = matcher.extractor(match[0]);
-      const key = `${match.index}-${match.index + match[0].length}-${match[0]}`;
-      const startIndex = match.index;
-      const endIndex = match.index + match[0].length;
-
-      // Skip duplicate matches
-      if (seen.has(key)) {
-        // Prevent infinite loops with global regex
-        if (!matcher.pattern.global) break;
-        continue;
-      }
-
-      // Check for overlapping ranges with existing matches
-      const overlappingMatch = matches.find((existing) => {
-        return (
-          (startIndex >= existing.startIndex && startIndex < existing.endIndex) ||
-          (endIndex > existing.startIndex && endIndex <= existing.endIndex) ||
-          (startIndex <= existing.startIndex && endIndex >= existing.endIndex)
-        );
-      });
-
-      if (overlappingMatch) {
-        // Prefer more specific patterns (Vue/React specific over generic HTML)
-        const currentSpecificity = getPatternSpecificity(matcher.framework);
-        const existingSpecificity = getPatternSpecificity(overlappingMatch.matcher.framework);
-
-        if (currentSpecificity > existingSpecificity) {
-          // Remove the less specific match and add the more specific one
-          const existingIndex = matches.indexOf(overlappingMatch);
-          matches.splice(existingIndex, 1);
-        } else {
-          // Keep the existing more specific match, skip this one
-          if (!matcher.pattern.global) break;
-          continue;
-        }
-      }
-
-      seen.add(key);
-      matches.push({
-        match: match[0],
-        classes,
-        matcher,
-        startIndex,
-        endIndex,
-      });
-
-      // Prevent infinite loops with global regex
-      if (!matcher.pattern.global) break;
-    }
+  for (const matcher of getPatternMatchersForFile(filePath)) {
+    collectMatcherResults(content, matcher, matches, seen);
   }
 
-  // Sort matches by start index to process them in order
   return matches.sort((a, b) => a.startIndex - b.startIndex);
 };
+
+function collectMatcherResults(
+  content: string,
+  matcher: PatternMatcher,
+  matches: ClassMatch[],
+  seen: Set<string>,
+): void {
+  matcher.pattern.lastIndex = 0;
+
+  for (
+    let match = matcher.pattern.exec(content);
+    match !== null;
+    match = matcher.pattern.exec(content)
+  ) {
+    addMatchIfPreferred(match, matcher, matches, seen);
+
+    if (!matcher.pattern.global) {
+      break;
+    }
+  }
+}
+
+function addMatchIfPreferred(
+  match: RegExpExecArray,
+  matcher: PatternMatcher,
+  matches: ClassMatch[],
+  seen: Set<string>,
+): void {
+  const classMatch = createClassMatch(match, matcher);
+  const key = `${classMatch.startIndex}-${classMatch.endIndex}-${classMatch.match}`;
+
+  if (seen.has(key) || !preferCurrentMatch(classMatch, matches)) {
+    return;
+  }
+
+  seen.add(key);
+  matches.push(classMatch);
+}
+
+function createClassMatch(match: RegExpExecArray, matcher: PatternMatcher): ClassMatch {
+  return {
+    match: match[0],
+    classes: matcher.extractor(match[0]),
+    matcher,
+    startIndex: match.index,
+    endIndex: match.index + match[0].length,
+  };
+}
+
+function preferCurrentMatch(currentMatch: ClassMatch, matches: ClassMatch[]): boolean {
+  const overlappingMatch = matches.find((existing) => rangesOverlap(currentMatch, existing));
+  if (!overlappingMatch) {
+    return true;
+  }
+
+  const currentSpecificity = getPatternSpecificity(currentMatch.matcher.framework);
+  const existingSpecificity = getPatternSpecificity(overlappingMatch.matcher.framework);
+  if (currentSpecificity <= existingSpecificity) {
+    return false;
+  }
+
+  matches.splice(matches.indexOf(overlappingMatch), 1);
+  return true;
+}
+
+function rangesOverlap(first: ClassMatch, second: ClassMatch): boolean {
+  return first.startIndex < second.endIndex && first.endIndex > second.startIndex;
+}
 
 /**
  * Get pattern specificity for prioritizing overlapping matches
