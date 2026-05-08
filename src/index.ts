@@ -426,5 +426,8 @@ function printFatalError(error: unknown): void {
 export { run };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  run().catch(console.error);
+  run().catch((error: unknown) => {
+    printFatalError(error);
+    process.exit(1);
+  });
 }

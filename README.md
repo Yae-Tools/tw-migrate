@@ -187,6 +187,34 @@ Converts `space-x` and `space-y` to `gap` when used together on flex or grid con
 
 **Note:** Only applies when both `space-x` and `space-y` have the same value and container uses `flex` or `grid`.
 
+### Tailwind v4 Utility Conversion (`v4-utilities`)
+
+Updates renamed and removed utilities for Tailwind CSS v4 compatibility.
+
+```html
+<!-- Before -->
+<div class="shadow-sm rounded outline-none ring flex-shrink-0">
+
+<!-- After -->
+<div class="shadow-xs rounded-sm outline-hidden ring-3 shrink-0">
+```
+
+**Supported patterns:** renamed shadow/drop-shadow/blur/backdrop-blur/radius utilities, `outline-none` → `outline-hidden`, `ring` → `ring-3`, `flex-shrink-*` → `shrink-*`, `flex-grow-*` → `grow-*`, `overflow-ellipsis` → `text-ellipsis`, and `decoration-*` box-decoration replacements.
+
+### Tailwind v4 CSS API Conversion (`css-api`)
+
+Updates legacy Tailwind CSS entrypoint directives to the v4 import API.
+
+```css
+/* Before */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* After */
+@import "tailwindcss";
+```
+
 ## ⚙️ Command Reference
 
 ### Core Options
@@ -212,6 +240,8 @@ Converts `space-x` and `space-y` to `gap` when used together on flex or grid con
 - `padding` - Consolidate padding axis classes  
 - `color-opacity` - Modernize color opacity syntax
 - `gap` - Convert space- to gap classes
+- `v4-utilities` - Rename Tailwind v4 utilities and removed deprecated class names
+- `css-api` - Replace v3 `@tailwind` entrypoint directives with the v4 `@import "tailwindcss"` API
 
 ### Interactive vs Non-Interactive Mode
 
