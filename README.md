@@ -1,6 +1,6 @@
 # TW Migrate
 
-[![npm version](https://badge.fury.io/js/tw-migrate.svg)](https://badge.fury.io/js/tw-migrate)
+[![npm version](https://badge.fury.io/js/%40yae-tools%2Ftw-migrate.svg)](https://badge.fury.io/js/%40yae-tools%2Ftw-migrate)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A powerful CLI tool designed to automate the migration of Tailwind CSS classes to newer, more efficient conventions. Modernize your codebase without manual refactoring, improving maintainability and consistency across your project.
@@ -33,7 +33,7 @@ As Tailwind CSS evolves, certain class patterns become deprecated or less effici
 The fastest way to get started is using `npx` for one-time or ad-hoc usage:
 
 ```bash
-npx tw-migrate
+npx @yae-tools/tw-migrate
 ```
 
 This downloads and runs the latest version without requiring local installation.
@@ -43,7 +43,7 @@ This downloads and runs the latest version without requiring local installation.
 For regular use or CI/CD integration:
 
 ```bash
-npm install -g tw-migrate
+npm install -g @yae-tools/tw-migrate
 ```
 
 After installation, the command is available system-wide:
@@ -65,7 +65,7 @@ tw-migrate -c size -p "src/**/*.tsx"
 Run without arguments to enter interactive mode:
 
 ```bash
-npx tw-migrate
+npx @yae-tools/tw-migrate
 ```
 
 The tool will:
@@ -80,10 +80,10 @@ For scripts or CI environments:
 
 ```bash
 # Apply specific conversions
-npx tw-migrate -c size margin -p "src/**/*.{js,jsx,ts,tsx}"
+npx @yae-tools/tw-migrate -c size margin -p "src/**/*.{js,jsx,ts,tsx}"
 
 # Multiple conversions with custom path
-npx tw-migrate -c "size,gap,color-opacity" -p "./components/**/*.tsx"
+npx @yae-tools/tw-migrate -c "size,gap,color-opacity" -p "./components/**/*.tsx"
 ```
 
 ## 📖 Usage Examples
@@ -92,39 +92,39 @@ npx tw-migrate -c "size,gap,color-opacity" -p "./components/**/*.tsx"
 
 ```bash
 # Process only TypeScript React files
-npx tw-migrate -c size -p "src/**/*.{ts,tsx}"
+npx @yae-tools/tw-migrate -c size -p "src/**/*.{ts,tsx}"
 
 # Process a single file
-npx tw-migrate -c color-opacity -p "components/Button.tsx"
+npx @yae-tools/tw-migrate -c color-opacity -p "components/Button.tsx"
 
 # Process HTML and CSS files
-npx tw-migrate -c gap -p "**/*.{html,css}"
+npx @yae-tools/tw-migrate -c gap -p "**/*.{html,css}"
 ```
 
 ### Monorepo Usage
 
 ```bash
 # Target specific package
-npx tw-migrate -c size -p "packages/ui/**/*.tsx"
+npx @yae-tools/tw-migrate -c size -p "packages/ui/**/*.tsx"
 
 # Process all packages
-npx tw-migrate -c margin padding -p "packages/**/*.{js,jsx,ts,tsx}"
+npx @yae-tools/tw-migrate -c margin padding -p "packages/**/*.{js,jsx,ts,tsx}"
 
 # Workspace-specific targeting
-npx tw-migrate -c "size,gap" -p "apps/web/src/**/*.tsx"
+npx @yae-tools/tw-migrate -c "size,gap" -p "apps/web/src/**/*.tsx"
 ```
 
 ### CI/CD Integration
 
 ```bash
 # Skip Git checks in CI environment
-npx tw-migrate -c size --ignore-git -p "src/**/*.tsx"
+npx @yae-tools/tw-migrate -c size --ignore-git -p "src/**/*.tsx"
 
 # Preview changes without writing files
-npx tw-migrate -c size --dry-run --diff
+npx @yae-tools/tw-migrate -c size --dry-run --diff
 
 # CI check: fail if files would change
-npx tw-migrate -c "size,margin,padding,color-opacity,gap" --check --json --ignore-git
+npx @yae-tools/tw-migrate -c "size,margin,padding,color-opacity,gap" --check --json --ignore-git
 ```
 
 ## 🔄 Conversion Types
@@ -286,7 +286,7 @@ You can store repeatable options in `tw-migrate.config.json` or `.tw-migraterc.j
 Use a custom location with:
 
 ```bash
-npx tw-migrate --config ./config/tw-migrate.json
+npx @yae-tools/tw-migrate --config ./config/tw-migrate.json
 ```
 
 ### Git Integration
@@ -302,7 +302,7 @@ git add .
 git commit -m "Pre-modernization commit"
 
 # Or override with --ignore-git flag
-npx tw-migrate --ignore-git
+npx @yae-tools/tw-migrate --ignore-git
 ```
 
 ## 🔗 Compatibility
@@ -358,7 +358,7 @@ npm install tailwindcss@latest
 git init
 
 # Or skip Git checks
-npx tw-migrate --ignore-git
+npx @yae-tools/tw-migrate --ignore-git
 ```
 
 **File permission errors:**
@@ -376,10 +376,10 @@ For detailed output, run with verbose logging:
 
 ```bash
 # Preview the exact changes
-npx tw-migrate -c size --dry-run --diff
+npx @yae-tools/tw-migrate -c size --dry-run --diff
 
 # Machine-readable output for automation
-npx tw-migrate -c size --check --json --ignore-git
+npx @yae-tools/tw-migrate -c size --check --json --ignore-git
 ```
 
 ## 🏗️ Advanced Usage
@@ -388,13 +388,13 @@ npx tw-migrate -c size --check --json --ignore-git
 
 ```bash
 # Process only specific directories
-npx tw-migrate -c size -p "src/components/**/*.tsx"
+npx @yae-tools/tw-migrate -c size -p "src/components/**/*.tsx"
 
 # Multiple pattern matching
-npx tw-migrate -c gap -p "{components,pages}/**/*.{js,ts}"
+npx @yae-tools/tw-migrate -c gap -p "{components,pages}/**/*.{js,ts}"
 
 # Exclude specific files
-npx tw-migrate -c margin -p "src/**/*.tsx" --exclude "**/*.test.tsx"
+npx @yae-tools/tw-migrate -c margin -p "src/**/*.tsx" --exclude "**/*.test.tsx"
 ```
 
 ### Integration with Build Tools
@@ -418,7 +418,7 @@ npx tw-migrate -c margin -p "src/**/*.tsx" --exclude "**/*.test.tsx"
   hooks:
     - id: tw-migrate
       name: Modernize Tailwind classes
-      entry: npx tw-migrate -c size --ignore-git
+      entry: npx @yae-tools/tw-migrate -c size --ignore-git
       language: system
       files: \.(js|jsx|ts|tsx|html|css|svelte)$
 ```

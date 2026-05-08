@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-05-08
+
 ### Added
 
 - Support for arbitrary values in `size`, `margin`, `padding`, and `gap` conversions.
