@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-05-08
+
+### Fixed
+
+- Fixed the installed `tw-migrate` binary not running when invoked through npm/npx symlinks.
+
 ## [2.0.0] - 2026-05-08
 
 ### Added

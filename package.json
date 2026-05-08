@@ -1,6 +1,6 @@
 {
   "name": "@yae-tools/tw-migrate",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A powerful CLI tool to automate migration of Tailwind CSS classes to newer, more efficient conventions",
   "type": "module",
   "engines": {

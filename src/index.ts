@@ -13,6 +13,7 @@ import { getBooleanOption } from './util/cliOptions.js';
 import { createUnifiedDiff } from './util/diff.js';
 import { loadConfig, TwMigrateConfig } from './util/config.js';
 import chalk from 'chalk';
+import { realpathSync } from 'fs';
 import { fileURLToPath } from 'url';
 import ora from 'ora';
 
@@ -425,7 +426,22 @@ function printFatalError(error: unknown): void {
 
 export { run };
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+function isCliEntrypoint(): boolean {
+  const currentFile = fileURLToPath(import.meta.url);
+  const invokedFile = process.argv[1];
+
+  if (!invokedFile) {
+    return false;
+  }
+
+  try {
+    return realpathSync(currentFile) === realpathSync(invokedFile);
+  } catch {
+    return currentFile === invokedFile;
+  }
+}
+
+if (isCliEntrypoint()) {
   run().catch((error: unknown) => {
     printFatalError(error);
     process.exit(1);
