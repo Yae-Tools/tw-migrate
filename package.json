@@ -1,6 +1,6 @@
 {
-  "name": "tw-migrate",
-  "version": "1.1.2",
+  "name": "@yae-tools/tw-migrate",
+  "version": "2.0.0",
   "description": "A powerful CLI tool to automate migration of Tailwind CSS classes to newer, more efficient conventions",
   "type": "module",
   "engines": {
@@ -8,7 +8,7 @@
   },
   "main": "dist/index.js",
   "bin": {
-    "tw-migrate": "./dist/index.js"
+    "tw-migrate": "dist/index.js"
   },
   "files": [
     "dist/index.js",
