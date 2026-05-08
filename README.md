@@ -54,7 +54,7 @@ yae-modernize-tailwind -c size -p "src/**/*.tsx"
 
 ### Prerequisites
 
-- **Node.js**: v16 or higher
+- **Node.js**: v20.19+, v22.13+, or v23.5+
 - **Git**: Optional but recommended for safety checks
 - **Tailwind CSS**: v2.0+ (see [compatibility section](#-compatibility) for specific requirements)
 
