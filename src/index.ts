@@ -9,6 +9,7 @@ import { exitMessage } from './util/exitMessage.js';
 import { ParallelProcessor } from './util/parallelProcessor.js';
 import { ErrorHandler } from './util/errorHandler.js';
 import { GitStatus, ProcessingResult } from './types/conversionTypes.js';
+import { getBooleanOption } from './util/cliOptions.js';
 import { createUnifiedDiff } from './util/diff.js';
 import { loadConfig, TwMigrateConfig } from './util/config.js';
 import chalk from 'chalk';
@@ -44,8 +45,9 @@ type NormalizedArgs = {
 };
 
 const DEFAULT_PATH = './**/*.{js,jsx,ts,tsx,html,css,svelte}';
+const rawArgs = hideBin(process.argv) ?? [];
 
-const argv = yargs(hideBin(process.argv))
+const argv = yargs(rawArgs)
   .option('conversions', {
     alias: 'c',
     type: 'array',
@@ -68,27 +70,22 @@ const argv = yargs(hideBin(process.argv))
   })
   .option('dry-run', {
     type: 'boolean',
-    default: false,
     description: 'Preview changes without writing files',
   })
   .option('diff', {
     type: 'boolean',
-    default: false,
     description: 'Print a unified diff for changed files',
   })
   .option('json', {
     type: 'boolean',
-    default: false,
     description: 'Print a machine-readable JSON summary',
   })
   .option('check', {
     type: 'boolean',
-    default: false,
     description: 'Exit with code 1 if any files would change',
   })
   .option('ignore-git', {
     type: 'boolean',
-    default: false,
     description: 'Ignore Git clean check',
   })
   .option('max-memory', {
@@ -118,6 +115,7 @@ const logo = `
 `;
 
 async function run() {
+  process.exitCode = undefined;
   const cliArgs = (await argv) as CliArgs;
   const config = await loadConfig(cliArgs.config);
   const args = normalizeArgs(cliArgs, config);
@@ -140,7 +138,9 @@ async function run() {
   }
 
   await processFiles(files, selectedConversions, gitStatus, args);
-  exitMessage();
+  if (shouldPrintExitMessage(args)) {
+    exitMessage();
+  }
 }
 
 function normalizeArgs(args: CliArgs, config: TwMigrateConfig): NormalizedArgs {
@@ -148,13 +148,17 @@ function normalizeArgs(args: CliArgs, config: TwMigrateConfig): NormalizedArgs {
     conversions: args.conversions ?? config.conversions,
     path: args.path ?? config.path ?? DEFAULT_PATH,
     exclude: args.exclude ?? config.exclude ?? [],
-    dryRun: args.dryRun ?? args['dry-run'] ?? config.dryRun ?? false,
-    diff: args.diff ?? config.diff ?? false,
-    json: args.json ?? config.json ?? false,
-    check: args.check ?? config.check ?? false,
-    ignoreGit: args.ignoreGit ?? args['ignore-git'] ?? config.ignoreGit ?? false,
+    dryRun: getBooleanOption(args, rawArgs, config.dryRun, 'dryRun', 'dry-run'),
+    diff: getBooleanOption(args, rawArgs, config.diff, 'diff'),
+    json: getBooleanOption(args, rawArgs, config.json, 'json'),
+    check: getBooleanOption(args, rawArgs, config.check, 'check'),
+    ignoreGit: getBooleanOption(args, rawArgs, config.ignoreGit, 'ignoreGit', 'ignore-git'),
     maxMemory: args.maxMemory ?? args['max-memory'] ?? config.maxMemory,
   };
+}
+
+function shouldPrintExitMessage(args: NormalizedArgs): boolean {
+  return !args.json && process.exitCode !== 1;
 }
 
 async function showEnvironmentWarnings(currentDir: string, quiet: boolean): Promise<void> {
@@ -242,7 +246,9 @@ async function resolveConversions(
         ),
       );
     }
-    exitMessage();
+    if (!quiet) {
+      exitMessage();
+    }
     return null;
   }
 
@@ -275,8 +281,8 @@ async function findFiles(
   if (files.length === 0) {
     if (!quiet) {
       console.log(chalk.yellow('No files found matching the specified pattern.'));
+      exitMessage();
     }
-    exitMessage();
     return [];
   }
 
