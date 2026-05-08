@@ -1,11 +1,11 @@
-# Yae Modernize Tailwind
+# TW Migrate
 
-[![npm version](https://badge.fury.io/js/yae-modernize-tailwind.svg)](https://badge.fury.io/js/yae-modernize-tailwind)
+[![npm version](https://badge.fury.io/js/tw-migrate.svg)](https://badge.fury.io/js/tw-migrate)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A powerful CLI tool designed to automate the migration of Tailwind CSS classes to newer, more efficient conventions. Modernize your codebase without manual refactoring, improving maintainability and consistency across your project.
 
-## 🌟 Why Yae Modernize Tailwind?
+## 🌟 Why TW Migrate?
 
 As Tailwind CSS evolves, certain class patterns become deprecated or less efficient, requiring developers to manually refactor large codebases—a time-consuming and error-prone process. This tool addresses that challenge by providing automated, rule-based conversion of outdated class usages into their modern equivalents.
 
@@ -33,7 +33,7 @@ As Tailwind CSS evolves, certain class patterns become deprecated or less effici
 The fastest way to get started is using `npx` for one-time or ad-hoc usage:
 
 ```bash
-npx yae-modernize-tailwind
+npx tw-migrate
 ```
 
 This downloads and runs the latest version without requiring local installation.
@@ -43,18 +43,18 @@ This downloads and runs the latest version without requiring local installation.
 For regular use or CI/CD integration:
 
 ```bash
-npm install -g yae-modernize-tailwind
+npm install -g tw-migrate
 ```
 
 After installation, the command is available system-wide:
 
 ```bash
-yae-modernize-tailwind -c size -p "src/**/*.tsx"
+tw-migrate -c size -p "src/**/*.tsx"
 ```
 
 ### Prerequisites
 
-- **Node.js**: v16 or higher
+- **Node.js**: v20.19+, v22.13+, or v23.5+
 - **Git**: Optional but recommended for safety checks
 - **Tailwind CSS**: v2.0+ (see [compatibility section](#-compatibility) for specific requirements)
 
@@ -65,7 +65,7 @@ yae-modernize-tailwind -c size -p "src/**/*.tsx"
 Run without arguments to enter interactive mode:
 
 ```bash
-npx yae-modernize-tailwind
+npx tw-migrate
 ```
 
 The tool will:
@@ -80,10 +80,10 @@ For scripts or CI environments:
 
 ```bash
 # Apply specific conversions
-npx yae-modernize-tailwind -c size margin -p "src/**/*.{js,jsx,ts,tsx}"
+npx tw-migrate -c size margin -p "src/**/*.{js,jsx,ts,tsx}"
 
 # Multiple conversions with custom path
-npx yae-modernize-tailwind -c "size,gap,color-opacity" -p "./components/**/*.tsx"
+npx tw-migrate -c "size,gap,color-opacity" -p "./components/**/*.tsx"
 ```
 
 ## 📖 Usage Examples
@@ -92,36 +92,39 @@ npx yae-modernize-tailwind -c "size,gap,color-opacity" -p "./components/**/*.tsx
 
 ```bash
 # Process only TypeScript React files
-npx yae-modernize-tailwind -c size -p "src/**/*.{ts,tsx}"
+npx tw-migrate -c size -p "src/**/*.{ts,tsx}"
 
 # Process a single file
-npx yae-modernize-tailwind -c color-opacity -p "components/Button.tsx"
+npx tw-migrate -c color-opacity -p "components/Button.tsx"
 
 # Process HTML and CSS files
-npx yae-modernize-tailwind -c gap -p "**/*.{html,css}"
+npx tw-migrate -c gap -p "**/*.{html,css}"
 ```
 
 ### Monorepo Usage
 
 ```bash
 # Target specific package
-npx yae-modernize-tailwind -c size -p "packages/ui/**/*.tsx"
+npx tw-migrate -c size -p "packages/ui/**/*.tsx"
 
 # Process all packages
-npx yae-modernize-tailwind -c margin padding -p "packages/**/*.{js,jsx,ts,tsx}"
+npx tw-migrate -c margin padding -p "packages/**/*.{js,jsx,ts,tsx}"
 
 # Workspace-specific targeting
-npx yae-modernize-tailwind -c "size,gap" -p "apps/web/src/**/*.tsx"
+npx tw-migrate -c "size,gap" -p "apps/web/src/**/*.tsx"
 ```
 
 ### CI/CD Integration
 
 ```bash
 # Skip Git checks in CI environment
-npx yae-modernize-tailwind -c size --no-git -p "src/**/*.tsx"
+npx tw-migrate -c size --ignore-git -p "src/**/*.tsx"
 
-# Non-interactive with all conversions
-npx yae-modernize-tailwind -c "size,margin,padding,color-opacity,gap" --no-git
+# Preview changes without writing files
+npx tw-migrate -c size --dry-run --diff
+
+# CI check: fail if files would change
+npx tw-migrate -c "size,margin,padding,color-opacity,gap" --check --json --ignore-git
 ```
 
 ## 🔄 Conversion Types
@@ -184,6 +187,34 @@ Converts `space-x` and `space-y` to `gap` when used together on flex or grid con
 
 **Note:** Only applies when both `space-x` and `space-y` have the same value and container uses `flex` or `grid`.
 
+### Tailwind v4 Utility Conversion (`v4-utilities`)
+
+Updates renamed and removed utilities for Tailwind CSS v4 compatibility.
+
+```html
+<!-- Before -->
+<div class="shadow-sm rounded outline-none ring flex-shrink-0">
+
+<!-- After -->
+<div class="shadow-xs rounded-sm outline-hidden ring-3 shrink-0">
+```
+
+**Supported patterns:** renamed shadow/drop-shadow/blur/backdrop-blur/radius utilities, `outline-none` → `outline-hidden`, `ring` → `ring-3`, `flex-shrink-*` → `shrink-*`, `flex-grow-*` → `grow-*`, `overflow-ellipsis` → `text-ellipsis`, and `decoration-*` box-decoration replacements.
+
+### Tailwind v4 CSS API Conversion (`css-api`)
+
+Updates legacy Tailwind CSS entrypoint directives to the v4 import API.
+
+```css
+/* Before */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* After */
+@import "tailwindcss";
+```
+
 ## ⚙️ Command Reference
 
 ### Core Options
@@ -192,7 +223,13 @@ Converts `space-x` and `space-y` to `gap` when used together on flex or grid con
 |------|-------|------|-------------|----------|
 | `--conversions` | `-c` | `string[]` | Conversion types to apply | Interactive prompt |
 | `--path` | `-p` | `string` | Glob pattern for file targeting | `./**/*.{js,jsx,ts,tsx,html,css,svelte}` |
-| `--no-git` | | `boolean` | Skip Git repository checks | `false` |
+| `--ignore-git` | | `boolean` | Skip Git repository checks | `false` |
+| `--exclude` | `-e` | `string[]` | Glob patterns to exclude | `[]` |
+| `--config` | | `string` | Path to config JSON file | auto-detect |
+| `--dry-run` | | `boolean` | Preview changes without writing files | `false` |
+| `--diff` | | `boolean` | Print a diff for changed files | `false` |
+| `--check` | | `boolean` | Exit with code 1 if files would change | `false` |
+| `--json` | | `boolean` | Print machine-readable summary | `false` |
 | `--version` | | | Display version information | |
 | `--help` | | | Show help information | |
 
@@ -203,6 +240,8 @@ Converts `space-x` and `space-y` to `gap` when used together on flex or grid con
 - `padding` - Consolidate padding axis classes  
 - `color-opacity` - Modernize color opacity syntax
 - `gap` - Convert space- to gap classes
+- `v4-utilities` - Rename Tailwind v4 utilities and removed deprecated class names
+- `css-api` - Replace v3 `@tailwind` entrypoint directives with the v4 `@import "tailwindcss"` API
 
 ### Interactive vs Non-Interactive Mode
 
@@ -228,6 +267,28 @@ The tool automatically detects your project environment:
 - **Git Status**: Checks for uncommitted changes
 - **File Types**: Adjusts processing based on detected framework
 
+### Config File
+
+You can store repeatable options in `tw-migrate.config.json` or `.tw-migraterc.json`:
+
+```json
+{
+  "path": "src/**/*.{js,jsx,ts,tsx,html,svelte}",
+  "exclude": ["**/*.test.tsx", "**/dist/**"],
+  "conversions": ["size", "margin", "padding", "color-opacity", "gap"],
+  "dryRun": false,
+  "diff": false,
+  "check": false,
+  "ignoreGit": false
+}
+```
+
+Use a custom location with:
+
+```bash
+npx tw-migrate --config ./config/tw-migrate.json
+```
+
 ### Git Integration
 
 By default, the tool prevents execution if uncommitted changes exist:
@@ -240,8 +301,8 @@ git status
 git add .
 git commit -m "Pre-modernization commit"
 
-# Or override with --no-git flag
-npx yae-modernize-tailwind --no-git
+# Or override with --ignore-git flag
+npx tw-migrate --ignore-git
 ```
 
 ## 🔗 Compatibility
@@ -266,8 +327,7 @@ npx yae-modernize-tailwind --no-git
 
 ### Node.js Compatibility
 
-- **Minimum**: Node.js v16
-- **Recommended**: Node.js v18+
+- **Minimum**: Node.js v20.19+, v22.13+, or v23.5+
 - **Dependencies**: All dependencies are bundled for minimal installation overhead
 
 ## 🚨 Troubleshooting
@@ -298,7 +358,7 @@ npm install tailwindcss@latest
 git init
 
 # Or skip Git checks
-npx yae-modernize-tailwind --no-git
+npx tw-migrate --ignore-git
 ```
 
 **File permission errors:**
@@ -315,8 +375,11 @@ chmod 644 src/components/*.tsx
 For detailed output, run with verbose logging:
 
 ```bash
-# Enable debug output (if implemented)
-DEBUG=yae-modernize-tailwind npx yae-modernize-tailwind
+# Preview the exact changes
+npx tw-migrate -c size --dry-run --diff
+
+# Machine-readable output for automation
+npx tw-migrate -c size --check --json --ignore-git
 ```
 
 ## 🏗️ Advanced Usage
@@ -325,13 +388,13 @@ DEBUG=yae-modernize-tailwind npx yae-modernize-tailwind
 
 ```bash
 # Process only specific directories
-npx yae-modernize-tailwind -c size -p "src/components/**/*.tsx"
+npx tw-migrate -c size -p "src/components/**/*.tsx"
 
 # Multiple pattern matching
-npx yae-modernize-tailwind -c gap -p "{components,pages}/**/*.{js,ts}"
+npx tw-migrate -c gap -p "{components,pages}/**/*.{js,ts}"
 
 # Exclude specific files
-npx yae-modernize-tailwind -c margin -p "src/**/*.tsx" --exclude "**/*.test.tsx"
+npx tw-migrate -c margin -p "src/**/*.tsx" --exclude "**/*.test.tsx"
 ```
 
 ### Integration with Build Tools
@@ -340,10 +403,10 @@ npx yae-modernize-tailwind -c margin -p "src/**/*.tsx" --exclude "**/*.test.tsx"
 ```json
 {
   "scripts": {
-    "modernize:interactive": "yae-modernize-tailwind",
-    "modernize:size": "yae-modernize-tailwind -c size",
-    "modernize:all": "yae-modernize-tailwind -c size,margin,padding,color-opacity,gap",
-    "modernize:ci": "yae-modernize-tailwind -c size --no-git"
+    "modernize:interactive": "tw-migrate",
+    "modernize:size": "tw-migrate -c size",
+    "modernize:all": "tw-migrate -c size,margin,padding,color-opacity,gap",
+    "modernize:ci": "tw-migrate -c size --ignore-git"
   }
 }
 ```
@@ -353,9 +416,9 @@ npx yae-modernize-tailwind -c margin -p "src/**/*.tsx" --exclude "**/*.test.tsx"
 # .pre-commit-config.yaml
 - repo: local
   hooks:
-    - id: yae-modernize-tailwind
+    - id: tw-migrate
       name: Modernize Tailwind classes
-      entry: npx yae-modernize-tailwind -c size --no-git
+      entry: npx tw-migrate -c size --ignore-git
       language: system
       files: \.(js|jsx|ts|tsx|html|css|svelte)$
 ```
@@ -375,8 +438,8 @@ We welcome contributions! Here's how to get started:
 
 ```bash
 # Clone the repository
-git clone https://github.com/Yae-Tools/yae-modernize-tailwind.git
-cd yae-modernize-tailwind
+git clone https://github.com/Yae-Tools/tw-migrate.git
+cd tw-migrate
 
 # Install dependencies
 npm install
@@ -421,7 +484,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
   <strong>Made with ❤️ for the Tailwind CSS community</strong><br>
-  <a href="https://github.com/Yae-Tools/yae-modernize-tailwind">⭐ Star on GitHub</a> •
-  <a href="https://github.com/Yae-Tools/yae-modernize-tailwind/issues">🐛 Report Bug</a> •
-  <a href="https://github.com/Yae-Tools/yae-modernize-tailwind/discussions">💬 Discussions</a>
+  <a href="https://github.com/Yae-Tools/tw-migrate">⭐ Star on GitHub</a> •
+  <a href="https://github.com/Yae-Tools/tw-migrate/issues">🐛 Report Bug</a> •
+  <a href="https://github.com/Yae-Tools/tw-migrate/discussions">💬 Discussions</a>
 </div>

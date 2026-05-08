@@ -5,9 +5,9 @@ export default defineConfig({
     environment: 'node',
     include: ['__tests__/**/*.test.ts'],
     globals: true,
-    coverage:{
-      provider: 'istanbul',
+    coverage: {
+      provider: 'v8',
       reporter: ['text', 'json', 'html'],
-    }
+    },
   },
 });

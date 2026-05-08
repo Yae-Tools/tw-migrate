@@ -109,7 +109,7 @@ export class ErrorHandler {
   private static sessionId: string = uuidv4();
   private static sessionStartTime: Date = new Date();
   private static memoryBuffer: ErrorReport[] = [];
-  private static cliArguments: string[] = process.argv.slice(2);
+  private static readonly cliArguments: string[] = process.argv.slice(2);
   private static currentFile: string | undefined;
   private static gitStatus: GitStatus | undefined;
   private static sessionErrors: Map<string, number> = new Map();
@@ -558,7 +558,7 @@ export class ErrorHandler {
 
       if (stats.size >= this.loggingConfig.maxLogSizeBytes) {
         // Create rotated file name with timestamp
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
         const ext = path.extname(logFile);
         const base = path.basename(logFile, ext);
         const dir = path.dirname(logFile);

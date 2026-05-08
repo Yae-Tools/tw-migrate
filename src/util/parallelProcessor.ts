@@ -16,6 +16,8 @@ export interface ProcessingOptions {
   memoryThreshold?: number; // MB
   maxMemoryUsage?: number; // MB - maximum memory to use (default: auto-detect)
   progressCallback?: (processed: number, total: number, currentFile: string) => void;
+  dryRun?: boolean;
+  collectContent?: boolean;
 }
 
 export interface FileTask {
@@ -30,6 +32,8 @@ export interface WorkerResult {
   changed: boolean;
   error?: Error;
   processingTime: number;
+  oldContent?: string;
+  newContent?: string;
 }
 
 /**
@@ -75,8 +79,8 @@ class MemoryMonitor {
 
     while (this.getCurrentUsage() > threshold && Date.now() - startTime < maxWaitMs) {
       // Force garbage collection if available
-      if (global.gc) {
-        global.gc();
+      if (globalThis.gc) {
+        globalThis.gc();
       }
 
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -115,9 +119,9 @@ class ChunkDistributor {
  */
 class ProgressAggregator {
   private processedFiles = 0;
-  private totalFiles = 0;
+  private readonly totalFiles: number = 0;
   private currentFile = '';
-  private callback?: (processed: number, total: number, currentFile: string) => void;
+  private readonly callback?: (processed: number, total: number, currentFile: string) => void;
 
   constructor(
     totalFiles: number,
@@ -153,6 +157,7 @@ class FileWorker {
     files: string[],
     conversions: string[],
     conversionFunctions: Record<string, (content: string, filePath?: string) => ConversionResult>,
+    options: Pick<ProcessingOptions, 'dryRun' | 'collectContent'> = {},
   ): Promise<WorkerResult[]> {
     const results: WorkerResult[] = [];
 
@@ -160,12 +165,14 @@ class FileWorker {
       const startTime = Date.now();
 
       try {
-        const result = await this.processFile(filePath, conversions, conversionFunctions);
+        const result = await this.processFile(filePath, conversions, conversionFunctions, options);
         results.push({
           filePath,
           success: true,
           changed: result.changed,
           processingTime: Date.now() - startTime,
+          oldContent: result.oldContent,
+          newContent: result.newContent,
         });
       } catch (error) {
         results.push({
@@ -185,7 +192,8 @@ class FileWorker {
     filePath: string,
     conversions: string[],
     conversionFunctions: Record<string, (content: string, filePath?: string) => ConversionResult>,
-  ): Promise<{ changed: boolean }> {
+    options: Pick<ProcessingOptions, 'dryRun' | 'collectContent'> = {},
+  ): Promise<{ changed: boolean; oldContent?: string; newContent?: string }> {
     const content = await ErrorHandler.safeFileOperation(
       () => fs.readFile(filePath, 'utf-8'),
       filePath,
@@ -216,7 +224,7 @@ class FileWorker {
       }
     }
 
-    if (hasChanges) {
+    if (hasChanges && !options.dryRun) {
       await ErrorHandler.safeFileOperation(
         () => fs.writeFile(filePath, currentContent, 'utf-8'),
         filePath,
@@ -224,7 +232,11 @@ class FileWorker {
       );
     }
 
-    return { changed: hasChanges };
+    return {
+      changed: hasChanges,
+      oldContent: options.collectContent && hasChanges ? content : undefined,
+      newContent: options.collectContent && hasChanges ? currentContent : undefined,
+    };
   }
 }
 
@@ -260,67 +272,79 @@ export class ParallelProcessor {
     const fileChunks = ChunkDistributor.distributeFiles(files, chunkSize);
 
     const results: ProcessingResult[] = [];
-    const errors: Error[] = [];
 
-    // Process chunks in parallel with worker limit
     for (let i = 0; i < fileChunks.length; i += maxWorkers) {
       const currentBatch = fileChunks.slice(i, i + maxWorkers);
-
-      // Check memory usage before processing batch
-      if (MemoryMonitor.shouldPauseProcessing(memoryThreshold)) {
-        await MemoryMonitor.waitForMemoryRelease(memoryThreshold * 0.8);
-      }
-
-      // Process current batch in parallel
-      const batchPromises = currentBatch.map((chunk) =>
-        FileWorker.processChunk(chunk, conversions, conversionFunctions),
+      await this.waitForAvailableMemory(memoryThreshold);
+      const batchResults = await this.processBatch(
+        currentBatch,
+        conversions,
+        conversionFunctions,
+        progressAggregator,
+        options,
       );
-
-      try {
-        const batchResults = await Promise.all(batchPromises);
-
-        // Flatten and process results
-        for (const chunkResults of batchResults) {
-          for (const workerResult of chunkResults) {
-            ErrorHandler.incrementProcessedFiles();
-            progressAggregator.updateProgress(workerResult.filePath);
-
-            if (workerResult.success) {
-              results.push({
-                success: true,
-                changes: workerResult.changed ? 1 : 0,
-              });
-            } else {
-              results.push({
-                success: false,
-                error: workerResult.error,
-              });
-
-              if (workerResult.error) {
-                errors.push(workerResult.error);
-              }
-            }
-          }
-        }
-      } catch (error) {
-        // Handle batch-level errors
-        const batchError = error instanceof Error ? error : new Error(String(error));
-        errors.push(batchError);
-
-        // Mark all files in failed batch as failed
-        for (const chunk of currentBatch) {
-          for (const filePath of chunk) {
-            results.push({
-              success: false,
-              error: batchError,
-            });
-            progressAggregator.updateProgress(filePath);
-          }
-        }
-      }
+      results.push(...batchResults);
     }
 
     return results;
+  }
+
+  private static async waitForAvailableMemory(memoryThreshold: number): Promise<void> {
+    if (MemoryMonitor.shouldPauseProcessing(memoryThreshold)) {
+      await MemoryMonitor.waitForMemoryRelease(memoryThreshold * 0.8);
+    }
+  }
+
+  private static async processBatch(
+    currentBatch: string[][],
+    conversions: string[],
+    conversionFunctions: Record<string, (content: string, filePath?: string) => ConversionResult>,
+    progressAggregator: ProgressAggregator,
+    options: Pick<ProcessingOptions, 'dryRun' | 'collectContent'>,
+  ): Promise<ProcessingResult[]> {
+    try {
+      const batchResults = await Promise.all(
+        currentBatch.map((chunk) =>
+          FileWorker.processChunk(chunk, conversions, conversionFunctions, options),
+        ),
+      );
+      return this.mapWorkerResults(batchResults.flat(), progressAggregator);
+    } catch (error) {
+      const batchError = error instanceof Error ? error : new Error(String(error));
+      return this.mapFailedBatch(currentBatch, batchError, progressAggregator);
+    }
+  }
+
+  private static mapWorkerResults(
+    workerResults: WorkerResult[],
+    progressAggregator: ProgressAggregator,
+  ): ProcessingResult[] {
+    return workerResults.map((workerResult) => {
+      ErrorHandler.incrementProcessedFiles();
+      progressAggregator.updateProgress(workerResult.filePath);
+
+      return workerResult.success
+        ? {
+            success: true,
+            filePath: workerResult.filePath,
+            changes: workerResult.changed ? 1 : 0,
+            changed: workerResult.changed,
+            oldContent: workerResult.oldContent,
+            newContent: workerResult.newContent,
+          }
+        : { success: false, filePath: workerResult.filePath, error: workerResult.error };
+    });
+  }
+
+  private static mapFailedBatch(
+    currentBatch: string[][],
+    batchError: Error,
+    progressAggregator: ProgressAggregator,
+  ): ProcessingResult[] {
+    return currentBatch.flat().map((filePath) => {
+      progressAggregator.updateProgress(filePath);
+      return { success: false, filePath, error: batchError };
+    });
   }
 
   /**
@@ -331,6 +355,7 @@ export class ParallelProcessor {
     conversions: string[],
     conversionFunctions: Record<string, (content: string, filePath?: string) => ConversionResult>,
     progressCallback?: (processed: number, total: number, currentFile: string) => void,
+    options: Pick<ProcessingOptions, 'dryRun' | 'collectContent'> = {},
   ): Promise<ProcessingResult[]> {
     const results: ProcessingResult[] = [];
 
@@ -346,6 +371,7 @@ export class ParallelProcessor {
           [filePath],
           conversions,
           conversionFunctions,
+          options,
         );
         const result = chunkResult[0];
 
@@ -353,12 +379,17 @@ export class ParallelProcessor {
 
         results.push({
           success: result.success,
+          filePath: result.filePath,
           changes: result.changed ? 1 : 0,
+          changed: result.changed,
+          oldContent: result.oldContent,
+          newContent: result.newContent,
           error: result.error,
         });
       } catch (error) {
         results.push({
           success: false,
+          filePath,
           error: error instanceof Error ? error : new Error(String(error)),
         });
       }
@@ -376,6 +407,8 @@ export class ParallelProcessor {
     conversionFunctions: Record<string, (content: string, filePath?: string) => ConversionResult>,
     progressCallback?: (processed: number, total: number, currentFile: string) => void,
     maxMemoryUsage?: number,
+    dryRun = false,
+    collectContent = false,
   ): Promise<ProcessingResult[]> {
     const maxMemoryLimit = MemoryMonitor.calculateOptimalMemoryLimit(maxMemoryUsage);
     const memoryUsage = MemoryMonitor.getCurrentUsage();
@@ -389,10 +422,21 @@ export class ParallelProcessor {
       return this.processFiles(files, conversions, conversionFunctions, {
         progressCallback,
         maxMemoryUsage,
+        dryRun,
+        collectContent,
         memoryThreshold: Math.round(availableMemory * 0.8),
       });
     } else {
-      return this.processFilesSequential(files, conversions, conversionFunctions, progressCallback);
+      return this.processFilesSequential(
+        files,
+        conversions,
+        conversionFunctions,
+        progressCallback,
+        {
+          dryRun,
+          collectContent,
+        },
+      );
     }
   }
 }

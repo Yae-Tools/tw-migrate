@@ -44,7 +44,7 @@ describe('LoggingConfigManager', () => {
       expect(config.logLevel).toBe('error');
       expect(config.maxLogFiles).toBe(30);
       expect(config.maxLogSizeBytes).toBe(10 * 1024 * 1024);
-      expect(config.logDirectory).toContain('.yae-modernize-tailwind/logs');
+      expect(config.logDirectory).toContain('.tw-migrate/logs');
       expect(config.enableMemoryBuffer).toBe(true);
       expect(config.bufferSize).toBe(100);
     });
@@ -211,7 +211,7 @@ describe('LoggingConfigManager', () => {
       const config = await LoggingConfigManager.getConfig();
       
       // The invalid path should be ignored during sanitization, reverting to default
-      expect(config.logDirectory).toContain('.yae-modernize-tailwind/logs');
+      expect(config.logDirectory).toContain('.tw-migrate/logs');
     });
   });
 
@@ -226,12 +226,12 @@ describe('LoggingConfigManager', () => {
       await LoggingConfigManager.saveUserConfig(config);
       
       expect(fs.mkdir).toHaveBeenCalledWith(
-        expect.stringContaining('.yae-modernize-tailwind/config'),
+        expect.stringContaining('.tw-migrate/config'),
         { recursive: true }
       );
       
       expect(fs.writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('.yae-modernize-tailwind/config/logging.json'),
+        expect.stringContaining('.tw-migrate/config/logging.json'),
         expect.stringContaining('"enabled": false'),
         'utf8'
       );
@@ -248,7 +248,7 @@ describe('LoggingConfigManager', () => {
       await LoggingConfigManager.resetConfig();
       
       expect(fs.unlink).toHaveBeenCalledWith(
-        expect.stringContaining('.yae-modernize-tailwind/config/logging.json')
+        expect.stringContaining('.tw-migrate/config/logging.json')
       );
     });
 
@@ -280,7 +280,7 @@ describe('LoggingConfigManager', () => {
       expect(config.logLevel).toBe('error'); // Default
       expect(config.maxLogFiles).toBe(30); // Default
       expect(config.maxLogSizeBytes).toBe(10 * 1024 * 1024); // Default
-      expect(config.logDirectory).toContain('.yae-modernize-tailwind/logs'); // Default
+      expect(config.logDirectory).toContain('.tw-migrate/logs'); // Default
       expect(config.enableMemoryBuffer).toBe(true); // Default
       expect(config.bufferSize).toBe(100); // Default
     });
@@ -323,7 +323,7 @@ describe('LoggingConfigManager', () => {
       const configPath = LoggingConfigManager.getConfigFilePath();
       
       expect(configPath).toContain(
-        '.yae-modernize-tailwind/config/logging.json'
+        '.tw-migrate/config/logging.json'
       );
     });
   });

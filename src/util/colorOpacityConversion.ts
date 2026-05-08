@@ -1,89 +1,79 @@
-import { ConversionResult } from '../types/conversionTypes.js';
-import parseClassName from './parseClassName.js';
-import { extractAllClassMatches, applyClassReplacements } from './patternRegistry.js';
-import { ClassUtils } from './safeArrayOperations.js';
-import { ErrorHandler } from './errorHandler.js';
+import { ClassInfo, ConversionResult } from '../types/conversionTypes.js';
+import { convertClassMatches } from './classConversionHelpers.js';
+import { ClassUtils, SafeClassProcessor } from './safeArrayOperations.js';
 
-const colorOpacityConversion = (content: string, filePath = 'unknown'): ConversionResult => {
-  try {
-    let changed = false;
-    const colorPrefixes = ['bg', 'text', 'border', 'ring', 'divide', 'placeholder'];
-    const classMatches = extractAllClassMatches(content, filePath);
-    const replacements: { original: (typeof classMatches)[0]; newClasses: string[] }[] = [];
+const COLOR_PREFIXES = ['bg', 'text', 'border', 'ring', 'divide', 'placeholder'];
 
-    for (const match of classMatches) {
-      const processor = ClassUtils.createProcessor(match.classes);
-      const originalClasses = match.classes.split(' ').filter((c) => c.length > 0);
-      const parsedClasses = originalClasses.map((cls, index) => ({
-        ...parseClassName(cls),
-        index,
-      }));
+const colorOpacityConversion = (content: string, filePath = 'unknown'): ConversionResult =>
+  convertClassMatches(content, filePath, replaceColorOpacityPairs);
 
-      const groupedByVariant = ClassUtils.groupByVariant(parsedClasses);
-      let matchModified = false;
+function replaceColorOpacityPairs(
+  processor: SafeClassProcessor,
+  parsedClasses: ClassInfo[],
+): boolean {
+  let modified = false;
+  const groupedByVariant = ClassUtils.groupByVariant(parsedClasses);
 
-      for (const variant in groupedByVariant) {
-        const variantGroup = groupedByVariant[variant];
-
-        for (const prefix of colorPrefixes) {
-          const colorClasses = variantGroup.filter(
-            (p) =>
-              p.className.startsWith(`${prefix}-`) &&
-              !p.className.startsWith(`${prefix}-opacity-`) &&
-              !p.className.includes('/'),
-          );
-          const opacityClasses = variantGroup.filter((p) =>
-            p.className.startsWith(`${prefix}-opacity-`),
-          );
-
-          // Find matching color and opacity classes
-          for (const colorClass of colorClasses) {
-            for (const opacityClass of opacityClasses) {
-              const opacityValue = ClassUtils.extractValue(opacityClass.className);
-              if (opacityValue) {
-                const newClass = `${variant}${colorClass.className}/${opacityValue}`;
-
-                // Use safe operations to replace the pair
-                if (
-                  ClassUtils.replacePair(
-                    processor,
-                    colorClass.original,
-                    opacityClass.original,
-                    newClass,
-                  )
-                ) {
-                  matchModified = true;
-                }
-              }
-            }
-          }
-        }
-      }
-
-      if (matchModified) {
-        const result = processor.execute();
-        if (result.changed) {
-          replacements.push({ original: match, newClasses: result.newClasses });
-          changed = true;
-        }
-      }
-    }
-
-    const newContent =
-      replacements.length > 0 ? applyClassReplacements(content, replacements) : content;
-
-    return { newContent, changed };
-  } catch (error) {
-    const conversionError = ErrorHandler.handleContentError(error, filePath);
-    ErrorHandler.recordError(conversionError);
-
-    if (!ErrorHandler.shouldContinueProcessing(conversionError)) {
-      throw conversionError;
-    }
-
-    // Return original content on error
-    return { newContent: content, changed: false };
+  for (const [variant, variantGroup] of Object.entries(groupedByVariant)) {
+    modified = replaceVariantColorOpacityPairs(processor, variantGroup, variant) || modified;
   }
-};
+
+  return modified;
+}
+
+function replaceVariantColorOpacityPairs(
+  processor: SafeClassProcessor,
+  variantGroup: ClassInfo[],
+  variant: string,
+): boolean {
+  let modified = false;
+
+  for (const prefix of COLOR_PREFIXES) {
+    const colorClasses = getColorClasses(variantGroup, prefix);
+    const opacityClasses = getOpacityClasses(variantGroup, prefix);
+    modified =
+      replacePrefixColorOpacityPairs(processor, colorClasses, opacityClasses, variant) || modified;
+  }
+
+  return modified;
+}
+
+function getColorClasses(classes: ClassInfo[], prefix: string): ClassInfo[] {
+  return classes.filter(
+    ({ className }) =>
+      className.startsWith(`${prefix}-`) &&
+      !className.startsWith(`${prefix}-opacity-`) &&
+      !className.includes('/'),
+  );
+}
+
+function getOpacityClasses(classes: ClassInfo[], prefix: string): ClassInfo[] {
+  return classes.filter(({ className }) => className.startsWith(`${prefix}-opacity-`));
+}
+
+function replacePrefixColorOpacityPairs(
+  processor: SafeClassProcessor,
+  colorClasses: ClassInfo[],
+  opacityClasses: ClassInfo[],
+  variant: string,
+): boolean {
+  let modified = false;
+
+  for (const colorClass of colorClasses) {
+    for (const opacityClass of opacityClasses) {
+      const opacityValue = ClassUtils.extractValue(opacityClass.className);
+      if (!opacityValue) {
+        continue;
+      }
+
+      const newClass = `${variant}${colorClass.className}/${opacityValue}`;
+      modified =
+        ClassUtils.replacePair(processor, colorClass.original, opacityClass.original, newClass) ||
+        modified;
+    }
+  }
+
+  return modified;
+}
 
 export default colorOpacityConversion;

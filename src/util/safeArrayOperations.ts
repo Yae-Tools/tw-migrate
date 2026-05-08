@@ -14,7 +14,7 @@ interface ClassMark {
  * Safe array processor that uses marking strategy to avoid index-shifting issues
  */
 export class SafeClassProcessor {
-  private originalClasses: string[];
+  private readonly originalClasses: string[];
   private marks: ClassMark[] = [];
   private additions: string[] = [];
 
@@ -58,6 +58,16 @@ export class SafeClassProcessor {
     const index = this.originalClasses.indexOf(original);
     if (index === -1) return false;
 
+    return this.markIndexForReplacement(index, replacement);
+  }
+
+  /**
+   * Mark a specific class occurrence for replacement
+   */
+  markIndexForReplacement(index: number, replacement: string): boolean {
+    const original = this.originalClasses[index];
+    if (!original) return false;
+
     this.marks.push({
       index,
       operation: 'replace',
@@ -87,7 +97,6 @@ export class SafeClassProcessor {
    */
   execute(): SafeArrayResult {
     const operations: ClassOperation[] = [];
-    const processedIndices = new Set<number>();
     const result: string[] = [];
 
     // Process original classes, applying marks
@@ -96,8 +105,6 @@ export class SafeClassProcessor {
       const mark = this.marks.find((m) => m.index === i);
 
       if (mark) {
-        processedIndices.add(i);
-
         if (mark.operation === 'remove') {
           operations.push({
             type: 'remove',
